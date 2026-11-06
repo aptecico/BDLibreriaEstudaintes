@@ -1,3 +1,28 @@
 1.La librería escolar necesita un reporte consolidado de pedidos que el área administrativa pueda consultar fácilmente, 
 sin tener que escribir consultas con múltiples JOIN cada vez. Actualmente la información está dispersa en cuatro tablas: pedidos, clientes, detalle_pedidos y libros.
 Tu tarea es crear una vista que integre esos datos en una sola "tabla virtual" lista para consultar.
+
+
+2. El gerente de la librería quiere conocer, para cada cliente, cuánto dinero ha gastado en total, cuántos pedidos ha realizado y cuál fue la fecha de su último pedido.
+Esta información la necesita en una sola consulta, sin escribir JOIN ni GROUP BY cada vez. 
+Tu tarea es crear una vista que resuma esa información.
+
+Datos esperado: 15 filas
+"cliente_id"	"cliente_nombre"	"ciudad"	"total_pedidos"	"monto_total_gastado"	"ultimo_pedido"
+"1"	"Carlos Mendoza"	"Bogotá"	"2"	"285,00"	"2024-01-12 08:10:00"
+"2"	"Ana María Gómez"	"Medellín"	"2"	"245,00"	"2024-02-12 09:20:00"
+"3"	"Jorge Salazar"	"Cali"	"1"	"85,00"	"2024-01-07 09:00:00"
+"4"	"Lucía Ramírez"	"Bogotá"	"2"	"400,00"	"2024-02-14 16:10:00"
+"5"	"Andrés Castro"	"Medellín"	"1"	"0,00"	"2024-01-10 16:20:00"
+"6"	"Valentina Torres"	"Cali"	"2"	"318,00"	"2024-02-16 08:55:00"
+"7"	"Felipe Ortiz"	"Barranquilla"	"1"	"60,00"	"2024-01-18 17:35:00"
+"8"	"Camila Rojas"	"Bogotá"	"2"	"645,00"	"2024-02-18 14:30:00"
+"9"	"Sebastián Vargas"	"Cartagena"	"1"	"75,00"	"2024-01-22 13:25:00"
+"10"	"Daniela Pineda"	"Medellín"	"1"	"140,00"	"2024-01-25 09:40:00"
+"11"	"Mateo Herrera"	"Pereira"	"1"	"88,00"	"2024-02-01 15:05:00"
+"12"	"Isabella Navarro"	"Cali"	"1"	"270,00"	"2024-02-03 11:15:00"
+"13"	"Santiago Mejía"	"Bogotá"	"1"	"54,00"	"2024-02-05 18:00:00"
+"14"	"Mariana Suárez"	"Bucaramanga"	"1"	"120,00"	"2024-02-07 10:30:00"
+"15"	"Juan Pablo Cárdenas"	"Manizales"	"1"	"0,00"	"2024-02-10 12:45:00"
+
+
