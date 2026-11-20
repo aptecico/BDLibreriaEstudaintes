@@ -1,0 +1,668 @@
+1. Verificar funciones
+USE evaluacion_inventario;
+
+-- VERIFICAR FUNCIONES
+SELECT
+    ROUTINE_NAME AS nombre,
+    ROUTINE_TYPE AS tipo,
+    DATA_TYPE AS retorno
+FROM INFORMATION_SCHEMA.ROUTINES
+WHERE ROUTINE_SCHEMA = DATABASE()
+AND ROUTINE_TYPE = 'FUNCTION';
+
+-- VERIFICAR TRIGGERS
+SELECT
+    TRIGGER_NAME AS nombre,
+    EVENT_MANIPULATION AS evento,
+    EVENT_OBJECT_TABLE AS tabla,
+    ACTION_TIMING AS momento
+FROM INFORMATION_SCHEMA.TRIGGERS
+WHERE TRIGGER_SCHEMA = DATABASE()
+ORDER BY EVENT_OBJECT_TABLE, EVENT_MANIPULATION;
+
+======================================================================================================
+=                                  Punto 2
+======================================================================================================
+
+2.SELECT
+    id,
+    venta_id,
+    producto_id,
+    cantidad,
+    precio_unitario,
+    cantidad * precio_unitario AS subtotal_esperado,
+    fn_calcular_subtotal(id) AS subtotal_funcion
+FROM detalle_ventas
+LIMIT 20;
+
+---------------------------------prueba 2
+SELECT *
+FROM (
+    SELECT
+        id,
+        cantidad * precio_unitario AS subtotal_esperado,
+        fn_calcular_subtotal(id) AS subtotal_funcion
+    FROM detalle_ventas
+) AS resultados
+WHERE NOT (subtotal_esperado <=> subtotal_funcion);
+
+
+======================================================================================================
+=                                  Punto 3
+======================================================================================================
+
+SELECT
+    v.cliente,
+    SUM(dv.cantidad * dv.precio_unitario) AS total_esperado,
+    fn_total_vendido_cliente(v.cliente) AS total_funcion
+FROM ventas v
+INNER JOIN detalle_ventas dv
+    ON dv.venta_id = v.id
+WHERE v.estado = 'confirmada'
+GROUP BY v.cliente;
+-----------------------------------------------
+SELECT *
+FROM (
+    SELECT
+        v.cliente,
+        SUM(dv.cantidad * dv.precio_unitario) AS total_esperado,
+        fn_total_vendido_cliente(v.cliente) AS total_funcion
+    FROM ventas v
+    INNER JOIN detalle_ventas dv
+        ON dv.venta_id = v.id
+    WHERE v.estado = 'confirmada'
+    GROUP BY v.cliente
+) AS resultados
+WHERE ABS(total_esperado - total_funcion) > 0.01;
+
+======================================================================================================
+=                                  Punto 4
+======================================================================================================
+
+SELECT
+    p.id,
+    p.nombre,
+    p.stock_inicial,
+
+    IFNULL((
+        SELECT SUM(dc.cantidad)
+        FROM detalle_compras dc
+        INNER JOIN compras c
+            ON c.id = dc.compra_id
+        WHERE dc.producto_id = p.id
+        AND c.estado = 'recibida'
+    ), 0) AS total_comprado,
+
+    IFNULL((
+        SELECT SUM(dv.cantidad)
+        FROM detalle_ventas dv
+        INNER JOIN ventas v
+            ON v.id = dv.venta_id
+        WHERE dv.producto_id = p.id
+        AND v.estado = 'confirmada'
+    ), 0) AS total_vendido,
+
+    p.stock_inicial
+    +
+    IFNULL((
+        SELECT SUM(dc.cantidad)
+        FROM detalle_compras dc
+        INNER JOIN compras c
+            ON c.id = dc.compra_id
+        WHERE dc.producto_id = p.id
+        AND c.estado = 'recibida'
+    ), 0)
+    -
+    IFNULL((
+        SELECT SUM(dv.cantidad)
+        FROM detalle_ventas dv
+        INNER JOIN ventas v
+            ON v.id = dv.venta_id
+        WHERE dv.producto_id = p.id
+        AND v.estado = 'confirmada'
+    ), 0) AS esperado_calculado,
+
+    fn_stock_esperado(p.id) AS resultado_funcion
+
+FROM productos p
+ORDER BY p.id;
+
+-------------------------------
+
+SELECT *
+FROM (
+    SELECT
+        p.id,
+        p.nombre,
+
+        p.stock_inicial
+        + IFNULL((
+            SELECT SUM(dc.cantidad)
+            FROM detalle_compras dc
+            INNER JOIN compras c ON c.id = dc.compra_id
+            WHERE dc.producto_id = p.id
+            AND c.estado = 'recibida'
+        ), 0)
+        - IFNULL((
+            SELECT SUM(dv.cantidad)
+            FROM detalle_ventas dv
+            INNER JOIN ventas v ON v.id = dv.venta_id
+            WHERE dv.producto_id = p.id
+            AND v.estado = 'confirmada'
+        ), 0) AS esperado,
+
+        fn_stock_esperado(p.id) AS calculado
+
+    FROM productos p
+) AS revision
+WHERE NOT (esperado <=> calculado);
+
+
+======================================================================================================
+=                                  Punto 5
+======================================================================================================
+
+SELECT
+    id,
+    nombre,
+    stock AS stock_actual,
+    fn_stock_esperado(id) AS stock_esperado,
+    fn_diferencia_inventario(id) AS diferencia,
+
+    CASE
+        WHEN fn_diferencia_inventario(id) = 0
+            THEN 'CORRECTO'
+        WHEN fn_diferencia_inventario(id) > 0
+            THEN 'SOBRANTE'
+        ELSE 'FALTANTE'
+    END AS diagnostico
+
+FROM productos
+ORDER BY nombre;
+
+----------------------------------------------
+SELECT *
+FROM (
+    SELECT
+        id,
+        stock - fn_stock_esperado(id) AS diferencia_esperada,
+        fn_diferencia_inventario(id) AS diferencia_funcion
+    FROM productos
+) AS revision
+WHERE NOT (
+    diferencia_esperada <=> diferencia_funcion
+);
+
+
+
+
+======================================================================================================
+=                                  Punto 6
+======================================================================================================
+
+SELECT
+    p.id,
+    p.nombre,
+    p.stock_inicial,
+
+    IFNULL((
+        SELECT SUM(dc.cantidad)
+        FROM detalle_compras dc
+        INNER JOIN compras c ON c.id = dc.compra_id
+        WHERE dc.producto_id = p.id
+        AND c.estado = 'recibida'
+    ), 0) AS compras,
+
+    IFNULL((
+        SELECT SUM(dv.cantidad)
+        FROM detalle_ventas dv
+        INNER JOIN ventas v ON v.id = dv.venta_id
+        WHERE dv.producto_id = p.id
+        AND v.estado = 'confirmada'
+    ), 0) AS ventas,
+
+    fn_stock_esperado(p.id) AS stock_esperado,
+
+    p.stock AS stock_actual,
+
+    p.stock - fn_stock_esperado(p.id) AS diferencia,
+
+    CASE
+        WHEN p.stock = fn_stock_esperado(p.id)
+            THEN 'CORRECTO'
+        WHEN p.stock > fn_stock_esperado(p.id)
+            THEN 'SOBRANTE'
+        ELSE 'FALTANTE'
+    END AS estado
+
+FROM productos p
+
+WHERE p.stock <> fn_stock_esperado(p.id)
+
+ORDER BY ABS(p.stock - fn_stock_esperado(p.id)) DESC;
+
+--------------------------------
+
+======================================================================================================
+=                                  Punto 7
+======================================================================================================
+
+
+START TRANSACTION;
+
+-- Seleccionar un producto activo con suficiente inventario
+SELECT id, stock
+INTO @producto_prueba, @stock_anterior
+FROM productos
+WHERE estado = 'activo'
+AND stock >= 2
+ORDER BY id
+LIMIT 1;
+
+-- Seleccionar una venta confirmada
+SELECT id
+INTO @venta_prueba
+FROM ventas
+WHERE estado = 'confirmada'
+ORDER BY id
+LIMIT 1;
+
+-- Insertar una unidad
+INSERT INTO detalle_ventas
+(venta_id, producto_id, cantidad, precio_unitario)
+
+SELECT
+    @venta_prueba,
+    id,
+    1,
+    precio
+FROM productos
+WHERE id = @producto_prueba;
+
+-- Revisar el inventario
+SELECT
+    @producto_prueba AS producto,
+    @stock_anterior AS stock_anterior,
+    stock AS stock_actual,
+    @stock_anterior - 1 AS stock_esperado,
+
+    CASE
+        WHEN stock = @stock_anterior - 1
+            THEN 'CORRECTO'
+        ELSE 'ERROR: EL TRIGGER NO DESCONTO EL STOCK'
+    END AS resultado
+
+FROM productos
+WHERE id = @producto_prueba;
+
+-- Revisar auditoria
+SELECT *
+FROM auditoria
+ORDER BY id DESC
+LIMIT 10;
+
+ROLLBACK;
+
+
+======================================================================================================
+=                                  Punto 8
+======================================================================================================
+
+
+SELECT id, stock
+FROM productos
+WHERE estado = 'activo'
+ORDER BY stock DESC
+LIMIT 5;
+
+
+INSERT INTO detalle_ventas
+(venta_id, producto_id, cantidad, precio_unitario)
+VALUES
+(
+    1,
+    1,
+    999999,
+    1000
+);
+
+
+
+
+======================================================================================================
+=                                  Punto 9
+======================================================================================================
+
+
+
+START TRANSACTION;
+
+-- Buscar un detalle confirmado cuyo producto tenga stock
+SELECT
+    dv.id,
+    dv.producto_id,
+    dv.cantidad,
+    p.stock
+
+INTO
+    @detalle_prueba,
+    @producto_prueba,
+    @cantidad_anterior,
+    @stock_anterior
+
+FROM detalle_ventas dv
+INNER JOIN ventas v ON v.id = dv.venta_id
+INNER JOIN productos p ON p.id = dv.producto_id
+
+WHERE v.estado = 'confirmada'
+AND p.stock >= 1
+ORDER BY dv.id
+LIMIT 1;
+
+-- Aumentar una unidad en el detalle
+UPDATE detalle_ventas
+SET cantidad = @cantidad_anterior + 1
+WHERE id = @detalle_prueba;
+
+-- Comprobar el resultado
+SELECT
+    @cantidad_anterior AS cantidad_anterior,
+    cantidad AS cantidad_nueva,
+    @stock_anterior AS stock_anterior,
+    stock AS stock_actual,
+
+    CASE
+        WHEN stock = @stock_anterior - 1
+            THEN 'CORRECTO'
+        ELSE 'ERROR EN EL TRIGGER UPDATE'
+    END AS resultado
+
+FROM detalle_ventas dv
+INNER JOIN productos p
+    ON p.id = dv.producto_id
+
+WHERE dv.id = @detalle_prueba;
+
+SELECT *
+FROM auditoria
+ORDER BY id DESC
+LIMIT 10;
+
+ROLLBACK;
+
+
+======================================================================================================
+=                                  Punto 10
+======================================================================================================
+
+
+
+
+START TRANSACTION;
+
+SELECT
+    dv.id,
+    dv.producto_id,
+    dv.cantidad,
+    p.stock
+
+INTO
+    @detalle_prueba,
+    @producto_prueba,
+    @cantidad_eliminada,
+    @stock_anterior
+
+FROM detalle_ventas dv
+INNER JOIN ventas v ON v.id = dv.venta_id
+INNER JOIN productos p ON p.id = dv.producto_id
+
+WHERE v.estado = 'confirmada'
+ORDER BY dv.id
+LIMIT 1;
+
+-- Eliminar el detalle
+DELETE FROM detalle_ventas
+WHERE id = @detalle_prueba;
+
+-- Comprobar recuperación de inventario
+SELECT
+    @cantidad_eliminada AS unidades_eliminadas,
+    @stock_anterior AS stock_anterior,
+    stock AS stock_actual,
+
+    CASE
+        WHEN stock = @stock_anterior + @cantidad_eliminada
+            THEN 'CORRECTO'
+        ELSE 'ERROR EN EL TRIGGER DELETE'
+    END AS resultado
+
+FROM productos
+WHERE id = @producto_prueba;
+
+SELECT *
+FROM auditoria
+ORDER BY id DESC
+LIMIT 10;
+
+ROLLBACK;
+
+
+
+======================================================================================================
+=                                  Punto 11
+======================================================================================================
+
+START TRANSACTION;
+
+-- INSERTAR PRODUCTO DE PRUEBA
+INSERT INTO productos
+(nombre, categoria, precio, stock_inicial, stock, estado)
+VALUES
+('PRODUCTO PRUEBA AUDITORIA',
+ 'Pruebas',
+ 25000,
+ 10,
+ 10,
+ 'activo');
+
+SET @id_producto = LAST_INSERT_ID();
+
+-- ACTUALIZAR PRODUCTO
+UPDATE productos
+SET precio = 30000,
+    stock = 15
+WHERE id = @id_producto;
+
+-- CONSULTAR AUDITORIA
+SELECT *
+FROM auditoria
+WHERE registro_id = @id_producto
+ORDER BY id;
+
+-- ELIMINAR PRODUCTO
+DELETE FROM productos
+WHERE id = @id_producto;
+
+-- VOLVER A CONSULTAR AUDITORIA
+SELECT *
+FROM auditoria
+ORDER BY id DESC
+LIMIT 15;
+
+ROLLBACK;
+
+
+
+
+======================================================================================================
+=                                  Punto 12
+======================================================================================================
+
+SELECT
+    tipo_movimiento,
+    tabla_origen,
+    COUNT(*) AS cantidad_movimientos,
+    SUM(cantidad) AS unidades
+FROM movimientos_inventario
+GROUP BY tipo_movimiento, tabla_origen;
+
+
+
+
+
+SELECT
+    dc.id AS detalle_compra,
+    c.id AS compra,
+    dc.producto_id,
+    dc.cantidad AS cantidad_compra,
+    mi.cantidad AS cantidad_movimiento,
+
+    CASE
+        WHEN mi.id IS NULL THEN 'MOVIMIENTO FALTANTE'
+        WHEN mi.cantidad <> dc.cantidad THEN 'CANTIDAD INCORRECTA'
+        ELSE 'CORRECTO'
+    END AS diagnostico
+
+FROM detalle_compras dc
+
+INNER JOIN compras c
+    ON c.id = dc.compra_id
+
+LEFT JOIN movimientos_inventario mi
+    ON mi.detalle_origen_id = dc.id
+    AND mi.tabla_origen = 'detalle_compras'
+
+WHERE c.estado = 'recibida'
+
+AND (
+    mi.id IS NULL
+    OR mi.cantidad <> dc.cantidad
+)
+
+ORDER BY dc.producto_id;
+
+
+
+
+SELECT
+    dv.id AS detalle_venta,
+    v.id AS venta,
+    dv.producto_id,
+    dv.cantidad AS cantidad_venta,
+    mi.cantidad AS cantidad_movimiento,
+
+    CASE
+        WHEN mi.id IS NULL THEN 'MOVIMIENTO FALTANTE'
+        WHEN mi.cantidad <> -dv.cantidad THEN 'CANTIDAD INCORRECTA'
+        ELSE 'CORRECTO'
+    END AS diagnostico
+
+FROM detalle_ventas dv
+
+INNER JOIN ventas v
+    ON v.id = dv.venta_id
+
+LEFT JOIN movimientos_inventario mi
+    ON mi.detalle_origen_id = dv.id
+    AND mi.tabla_origen = 'detalle_ventas'
+
+WHERE v.estado = 'confirmada'
+
+AND (
+    mi.id IS NULL
+    OR mi.cantidad <> -dv.cantidad
+)
+
+ORDER BY dv.producto_id;
+
+
+
+======================================================================================================
+=                                  Punto 13
+======================================================================================================
+
+SELECT
+    tabla_origen,
+    detalle_origen_id,
+    COUNT(*) AS repeticiones
+FROM movimientos_inventario
+GROUP BY tabla_origen, detalle_origen_id
+HAVING COUNT(*) > 1;
+
+
+
+======================================================================================================
+=                                  Punto 14
+======================================================================================================
+
+SELECT
+    p.id,
+    p.nombre,
+    p.stock_inicial,
+    p.stock AS stock_actual,
+
+    p.stock_inicial
+    + IFNULL(SUM(mi.cantidad), 0) AS stock_segun_movimientos,
+
+    p.stock -
+    (
+        p.stock_inicial
+        + IFNULL(SUM(mi.cantidad), 0)
+    ) AS diferencia,
+
+    CASE
+        WHEN p.stock =
+            p.stock_inicial + IFNULL(SUM(mi.cantidad), 0)
+            THEN 'CORRECTO'
+        ELSE 'INCONSISTENCIA'
+    END AS diagnostico
+
+FROM productos p
+
+LEFT JOIN movimientos_inventario mi
+    ON mi.producto_id = p.id
+
+GROUP BY
+    p.id,
+    p.nombre,
+    p.stock_inicial,
+    p.stock
+
+ORDER BY ABS(
+    p.stock - (
+        p.stock_inicial + IFNULL((
+            SELECT SUM(m2.cantidad)
+            FROM movimientos_inventario m2
+            WHERE m2.producto_id = p.id
+        ), 0)
+    )
+) DESC;
+
+
+
+
+
+======================================================================================================
+=                                  Punto 15
+======================================================================================================
+
+Prueba A: cantidad en cero
+
+INSERT INTO detalle_ventas
+(venta_id, producto_id, cantidad, precio_unitario)
+VALUES
+(1, 1, 0, 1000);
+
+
+Prueba B: cantidad negativa
+
+INSERT INTO detalle_ventas
+(venta_id, producto_id, cantidad, precio_unitario)
+VALUES
+(1, 1, -5, 1000);
+
+
+Prueba C: producto inactivo
+SELECT id, nombre, estado
+FROM productos
+WHERE estado = 'inactivo';
